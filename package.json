@@ -1,0 +1,28 @@
+{
+  "name": "cassandra-core",
+  "version": "0.1.3",
+  "description": "cassandra",
+  "main": "./lib/index.js",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build:lib": "tsc",
+    "clean:lib": "rimraf lib"
+  },
+  "devDependencies": {
+    "tslint": "5.10.0",
+    "typescript": "^3.8.3"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com/core-ts/cassandra"
+  },
+  "keywords": [
+    "cassandra"
+  ],
+  "dependencies": {
+    "cassandra-driver": "^4.6.3"
+  }
+}
