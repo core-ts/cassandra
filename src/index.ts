@@ -223,7 +223,7 @@ export function handleBool<T>(objs: T[], bools: Attribute[]): T[] {
   for (const obj of objs) {
     for (const field of bools) {
       const v = obj[field.name];
-      if (v != null && v !== undefined && typeof v !== 'boolean') {
+      if (typeof v !== 'boolean' && v != null && v !== undefined) {
         const b = field.true;
         if (b == null || b === undefined) {
           // tslint:disable-next-line:triple-equals
