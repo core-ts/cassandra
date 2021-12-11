@@ -10,12 +10,17 @@ export {buildToSaveBatch as buildToInsertBatch};
 
 export class ClientManager implements Manager {
   constructor(public client: Client) {
+    this.param = this.param.bind(this);
     this.exec = this.exec.bind(this);
     this.execBatch = this.execBatch.bind(this);
     this.query = this.query.bind(this);
     this.queryOne = this.queryOne.bind(this);
     this.execScalar = this.execScalar.bind(this);
     this.count = this.count.bind(this);
+  }
+  driver = 'cassandra';
+  param(i: number): string {
+    return '?';
   }
   exec(sql: string, args?: any[]): Promise<number> {
     return exec(this.client, sql, args);
@@ -26,7 +31,7 @@ export class ClientManager implements Manager {
   query<T>(sql: string, args?: any[], m?: StringMap, bools?: Attribute[], options?: QueryOptions): Promise<T[]> {
     return query(this.client, sql, args, m, bools, options);
   }
-  queryOne<T>(sql: string, args?: any[], m?: StringMap, bools?: Attribute[], options?: QueryOptions): Promise<T> {
+  queryOne<T>(sql: string, args?: any[], m?: StringMap, bools?: Attribute[], options?: QueryOptions): Promise<T|null> {
     return queryOne(this.client, sql, args, m, bools, options);
   }
   execScalar<T>(sql: string, args?: any[]): Promise<T> {
@@ -72,7 +77,7 @@ export function handlePromises<T> (arr: Promise<number>[]): Promise<number> {
   });
 }
 export async function execRawBatch<T>(client: Client, statements: Statement[], batchSize?: number, options?: QueryOptions): Promise<T[]> {
-  if (statements.length > batchSize) {
+  if (batchSize && statements.length > batchSize) {
     const arr = [];
     while (statements.length !== 0) {
       if (statements.length > batchSize) {
@@ -97,10 +102,10 @@ export function toLength(r: types.ResultSet): number {
 }
 export function handleArrayPromises<T> (arrayPromise: Promise<types.ResultSet>[]): Promise<T[]> {
   return Promise.all(arrayPromise).then(result => {
-    let arrRealResult = [];
+    let arrRealResult: any[] | PromiseLike<any[]> = [];
     result.forEach(item => {
       if (item.rows) {
-        arrRealResult = [... arrRealResult, ...item.rows];
+        arrRealResult = [... arrRealResult as any, ...item.rows];
       }
     });
     return arrRealResult;
@@ -127,7 +132,7 @@ export function query<T>(client: Client, sql: string, args?: any[], m?: StringMa
     return handleResults<T>(r.rows as any, m, bools);
   });
 }
-export function queryOne<T>(client: Client, sql: string, args?: any[], m?: StringMap, bools?: Attribute[], options?: QueryOptions): Promise<T> {
+export function queryOne<T>(client: Client, sql: string, args?: any[], m?: StringMap, bools?: Attribute[], options?: QueryOptions): Promise<T|null> {
   const p = args && args.length > 0 ? toArray(args) : undefined;
   return client.execute(sql, p, options).then(r => {
     if (!r.rows || r.rows.length === 0) {
@@ -143,7 +148,7 @@ export function execScalar<T>(client: Client, sql: string, args?: any[]): Promis
       return null;
     } else {
       const keys = Object.keys(r);
-      return r[keys[0]];
+      return (r as any)[keys[0]];
     }
   });
 }
@@ -178,7 +183,7 @@ export function saveBatch<T>(client: Client|((statements: Statement[]) => Promis
 export const insert = save;
 export const insertBatch = saveBatch;
 
-export function toArray<T>(arr: T[]): T[] {
+export function toArray<T>(arr?: T[]): T[] {
   if (!arr || arr.length === 0) {
     return [];
   }
@@ -186,7 +191,7 @@ export function toArray<T>(arr: T[]): T[] {
   const l = arr.length;
   for (let i = 0; i < l; i++) {
     if (arr[i] === undefined) {
-      p.push(null);
+      p.push(null as any);
     } else {
       p.push(arr[i]);
     }
@@ -221,16 +226,19 @@ export function handleBool<T>(objs: T[], bools: Attribute[]): T[] {
     return objs;
   }
   for (const obj of objs) {
+    const o: any = obj;
     for (const field of bools) {
-      const v = obj[field.name];
-      if (typeof v !== 'boolean' && v != null && v !== undefined) {
-        const b = field.true;
-        if (b == null || b === undefined) {
-          // tslint:disable-next-line:triple-equals
-          obj[field.name] = ('1' == v || 'T' == v || 'Y' == v);
-        } else {
-          // tslint:disable-next-line:triple-equals
-          obj[field.name] = (v == b ? true : false);
+      if (field.name) {
+        const v = o[field.name];
+        if (typeof v !== 'boolean' && v != null && v !== undefined) {
+          const b = field.true;
+          if (b == null || b === undefined) {
+            // tslint:disable-next-line:triple-equals
+            o[field.name] = ('1' == v || 'T' == v || 'Y' == v);
+          } else {
+            // tslint:disable-next-line:triple-equals
+            o[field.name] = (v == b ? true : false);
+          }
         }
       }
     }
@@ -245,16 +253,16 @@ export function map<T>(obj: T, m?: StringMap): any {
   if (mkeys.length === 0) {
     return obj;
   }
-  const obj2: any = {};
+  const o: any = {};
   const keys = Object.keys(obj);
   for (const key of keys) {
     let k0 = m[key];
     if (!k0) {
       k0 = key;
     }
-    obj2[k0] = obj[key];
+    o[k0] = (obj as any)[key];
   }
-  return obj2;
+  return o;
 }
 export function mapArray<T>(results: T[], m?: StringMap): T[] {
   if (!m) {
@@ -281,11 +289,11 @@ export function mapArray<T>(results: T[], m?: StringMap): T[] {
   }
   return objs;
 }
-export function getFields(fields: string[], all?: string[]): string[] {
+export function getFields(fields: string[], all?: string[]): string[]|undefined {
   if (!fields || fields.length === 0) {
     return undefined;
   }
-  const ext: string[] = [];
+  const ext: string [] = [];
   if (all) {
     for (const s of fields) {
       if (all.includes(s)) {
@@ -325,7 +333,7 @@ export function getMapField(name: string, mp?: StringMap): string {
 export function isEmpty(s: string): boolean {
   return !(s && s.length > 0);
 }
-export function version(attrs: Attributes): Attribute {
+export function version(attrs: Attributes): Attribute|undefined {
   const ks = Object.keys(attrs);
   for (const k of ks) {
     const attr = attrs[k];
@@ -365,7 +373,7 @@ export class CassandraWriter<T> {
       if (this.exec) {
         return this.exec(stmt.query, stmt.params);
       } else {
-        return exec(this.client, stmt.query, stmt.params);
+        return exec(this.client as any, stmt.query, stmt.params);
       }
     } else {
       return Promise.resolve(0);
@@ -412,7 +420,7 @@ export class CassandraBatchWriter<T> {
       if (this.execute) {
         return this.execute(stmts);
       } else {
-        return execBatch(this.pool, stmts, this.size);
+        return execBatch(this.pool as any, stmts, this.size);
       }
     } else {
       return Promise.resolve(0);
@@ -424,15 +432,12 @@ export interface AnyMap {
   [key: string]: any;
 }
 // tslint:disable-next-line:max-classes-per-file
-
 export class CassandraChecker {
-  constructor(private client: Client, private service?: string, private timeout?: number) {
-    if (!this.timeout) {
-      this.timeout = 4200;
-    }
-    if (!this.service) {
-      this.service = 'cassandra';
-    }
+  timeout: number;
+  service: string;
+  constructor(private client: Client, service?: string, timeout?: number) {
+    this.timeout = (timeout ? timeout : 4200);
+    this.service = (service ? service : 'cassandra');
     this.check = this.check.bind(this);
     this.name = this.name.bind(this);
     this.build = this.build.bind(this);
